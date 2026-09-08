@@ -1,0 +1,43 @@
+[package]
+name = "personal-dashboard"
+version = "0.1.0"
+edition = "2021"
+default-run = "personal-dashboard"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+feed-rs = "2"
+scraper = "0.20"
+url = "2"
+
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+sysinfo = "0.32"
+keyring = "3"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
+thiserror = "2"
+
+[profile.release]
+# Optimize for the "extrem ressourcenschonend" goal, not compile speed.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

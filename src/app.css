@@ -1,0 +1,121 @@
+/*
+  Design concept: "Instrument panel, not a website."
+  The dashboard should feel like it belongs to the OS desktop the way a
+  cockpit display belongs to a plane — quiet, legible, data-forward.
+  Numbers and live readouts (clock, system stats, weather) use a
+  technical monospace face, as if lifted from an FPV goggle OSD or a
+  hardware monitor. Labels and article text use a calm humanist sans.
+  No drop shadows, no uniform rounded-card kit: widgets are told apart
+  by a 1px low-opacity hairline, not by a shadow stack.
+*/
+
+:root {
+  /* --- Color: dark theme (default) --- */
+  --color-bg: #14171c;
+  --color-surface: #1b1f26;
+  --color-surface-raised: #21262f;
+  --color-border: rgba(232, 234, 237, 0.08);
+  --color-border-strong: rgba(232, 234, 237, 0.16);
+  --color-text: #e8eaed;
+  --color-text-secondary: #8b93a1;
+  --color-text-tertiary: #5b6270;
+  --color-accent: #e8a33d; /* amber — analog gauge / OSD amber, not neon-hacker green */
+  --color-accent-dim: rgba(232, 163, 61, 0.16);
+  --color-good: #7fb88a;
+  --color-warn: #e8a33d;
+  --color-bad: #d9704f;
+
+  /* --- Type --- */
+  --font-data: "JetBrains Mono", "Berkeley Mono", ui-monospace, monospace;
+  --font-body: "Inter", "Manrope", system-ui, -apple-system, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2.25rem;
+
+  /* --- Layout / personalization defaults (section 15) --- */
+  --radius: 10px; /* "leicht abgerundet" default; user can set 0 or 999px */
+  --widget-gap: 16px;
+  --card-padding: 18px;
+  --surface-alpha: 1; /* transparency slider target, 0.4–1 */
+  --transition-fast: 120ms ease;
+  --transition-medium: 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-theme="light"] {
+  --color-bg: #f2f1ec;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-border: rgba(20, 23, 28, 0.08);
+  --color-border-strong: rgba(20, 23, 28, 0.14);
+  --color-text: #1b1f26;
+  --color-text-secondary: #5b6270;
+  --color-text-tertiary: #8b93a1;
+  --color-accent: #b5751f;
+  --color-accent-dim: rgba(181, 117, 31, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Reduced motion: respected everywhere, not just here */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.data-readout {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.surface {
+  background: color-mix(in srgb, var(--color-surface) calc(var(--surface-alpha) * 100%), transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--color-accent-dim);
+}
+
+/* visible keyboard focus, not suppressed */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

@@ -27,6 +27,11 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 base64 = "0.22"
 rand = "0.8"
+anyhow = "1"
+chrono = "0.4"
+uuid = "1"
+sysinfo = "0.32"
+keyring = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris = "2"

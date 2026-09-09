@@ -149,10 +149,11 @@ fn read_gpu_usage() -> Option<f32> {
 }
 
 fn read_nvidia_smi() -> Option<f32> {
-    let output = Command::new("nvidia-smi")
-        .args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"])
-        .output()
-        .ok()?;
+    let mut cmd = Command::new("nvidia-smi");
+    cmd.args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]);
+    suppress_console_window(&mut cmd);
+
+    let output = cmd.output().ok()?;
 
     if !output.status.success() {
         return None;
@@ -165,6 +166,21 @@ fn read_nvidia_smi() -> Option<f32> {
         .parse::<f32>()
         .ok()
 }
+
+/// On Windows, spawning a child process without this flag briefly flashes
+/// a visible console window on screen every time — very noticeable here
+/// since GPU polling happens every couple of seconds. `nvidia-smi` is the
+/// only subprocess this module spawns; if more get added later, route
+/// them through this helper too.
+#[cfg(windows)]
+fn suppress_console_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn suppress_console_window(_cmd: &mut Command) {}
 
 #[cfg(target_os = "linux")]
 fn read_amdgpu_sysfs() -> Option<f32> {

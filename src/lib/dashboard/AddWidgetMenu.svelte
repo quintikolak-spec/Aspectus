@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, tick } from "svelte";
   import { settingsStore } from "../stores/settings";
   import { api } from "../api";
   import type { WidgetKind } from "../types";
 
   const dispatch = createEventDispatcher();
+
+  let urlInput: HTMLInputElement;
 
   const BASE_WIDGETS: { kind: WidgetKind; label: string }[] = [
     { kind: "clock", label: "Uhr" },
@@ -14,6 +16,12 @@
     { kind: "calendar", label: "Kalender" },
     { kind: "media", label: "Medien" },
   ];
+
+  async function goToAddSource() {
+    mode = "add-source";
+    await tick();
+    urlInput?.focus();
+  }
 
   let mode: "menu" | "add-source" = "menu";
   let sourceUrl = "";
@@ -62,15 +70,20 @@
         {#each BASE_WIDGETS as w}
           <button class="option" on:click={() => addBaseWidget(w.kind)}>{w.label}</button>
         {/each}
-        <button class="option accent" on:click={() => (mode = "add-source")}>
+        <button class="option accent" on:click={goToAddSource}>
           + Eigene Quelle
         </button>
       </div>
     {:else}
       <h2>Quelle hinzufügen</h2>
       <label class="field">
-        <span>Link</span>
-        <input type="url" placeholder="https://…" bind:value={sourceUrl} />
+        <span>Link zur Webseite oder zum RSS-Feed</span>
+        <input
+          type="url"
+          placeholder="z. B. https://www.heise.de/rss/heise-atom.xml"
+          bind:value={sourceUrl}
+          bind:this={urlInput}
+        />
       </label>
       <label class="field">
         <span>Kategorie</span>
@@ -164,6 +177,21 @@
     background: var(--color-bg);
     color: var(--color-text);
     font-size: var(--text-sm);
+  }
+
+  .field input:focus,
+  .field select:focus {
+    border-color: var(--color-accent);
+  }
+
+  .field select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93a1' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-size: 9px 6px;
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
   }
 
   .error {

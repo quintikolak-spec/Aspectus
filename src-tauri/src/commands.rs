@@ -1,8 +1,8 @@
 use crate::core::system_monitor::SystemMonitor;
-use crate::core::{auth, cache, news_engine, settings, source_manager};
+use crate::core::{auth, cache, media, news_engine, settings, source_manager};
 use crate::db::Db;
 use std::sync::Mutex;
-use crate::models::{AppSettings, NewsCard, Source, SystemStats, WeatherSnapshot};
+use crate::models::{AppSettings, NewsCard, NowPlaying, Source, SystemStats, WeatherSnapshot};
 use tauri::State;
 
 #[tauri::command]
@@ -37,7 +37,7 @@ pub async fn get_weather(db: State<'_, Db>, lat: f64, lon: f64) -> Result<Weathe
     // Open-Meteo: free, no API key, matches the "no secrets in frontend"
     // requirement trivially since there's nothing to leak.
     let url = format!(
-        "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto"
+        "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto"
     );
     let resp = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
@@ -46,6 +46,9 @@ pub async fn get_weather(db: State<'_, Db>, lat: f64, lon: f64) -> Result<Weathe
         location_name: "Aktueller Standort".into(),
         temp_c: json["current"]["temperature_2m"].as_f64().unwrap_or(0.0) as f32,
         condition: weather_code_to_text(json["current"]["weather_code"].as_i64().unwrap_or(0)),
+        humidity_percent: json["current"]["relative_humidity_2m"].as_f64().map(|v| v as f32),
+        wind_speed_kmh: json["current"]["wind_speed_10m"].as_f64().map(|v| v as f32),
+        feels_like_c: json["current"]["apparent_temperature"].as_f64().map(|v| v as f32),
         forecast: vec![], // TODO: map `daily` arrays into ForecastDay entries
     };
 
@@ -127,4 +130,39 @@ pub fn openai_sign_out() -> Result<(), String> {
 #[tauri::command]
 pub fn openai_is_signed_in() -> bool {
     auth::is_signed_in()
+}
+
+#[tauri::command]
+pub fn get_now_playing(preferred: Option<String>) -> Option<NowPlaying> {
+    media::now_playing(preferred.as_deref())
+}
+
+#[tauri::command]
+pub fn media_play_pause(preferred: Option<String>) {
+    media::play_pause(preferred.as_deref());
+}
+
+#[tauri::command]
+pub fn media_next(preferred: Option<String>) {
+    media::next(preferred.as_deref());
+}
+
+#[tauri::command]
+pub fn media_previous(preferred: Option<String>) {
+    media::previous(preferred.as_deref());
+}
+
+#[tauri::command]
+pub fn media_get_volume(preferred: Option<String>) -> Option<f64> {
+    media::get_volume(preferred.as_deref())
+}
+
+#[tauri::command]
+pub fn media_set_volume(preferred: Option<String>, level: f64) {
+    media::set_volume(preferred.as_deref(), level);
+}
+
+#[tauri::command]
+pub fn media_list_players() -> Vec<String> {
+    media::list_players()
 }

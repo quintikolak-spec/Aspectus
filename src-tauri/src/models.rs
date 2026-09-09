@@ -33,6 +33,8 @@ pub struct WidgetLayout {
     /// saved settings (from before this field existed) loading cleanly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hidden_processes: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_media_player: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +103,17 @@ pub struct SystemStats {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NowPlaying {
+    pub title: String,
+    pub artist: Option<String>,
+    /// Player identity from MPRIS, e.g. "Brave", "Spotify" — shown so the
+    /// user knows which app is actually playing.
+    pub source: String,
+    pub is_playing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ForecastDay {
     pub day: String,
     pub high: f32,
@@ -114,5 +127,8 @@ pub struct WeatherSnapshot {
     pub location_name: String,
     pub temp_c: f32,
     pub condition: String,
+    pub humidity_percent: Option<f32>,
+    pub wind_speed_kmh: Option<f32>,
+    pub feels_like_c: Option<f32>,
     pub forecast: Vec<ForecastDay>,
 }

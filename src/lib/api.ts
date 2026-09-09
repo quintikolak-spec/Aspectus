@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
   NewsCard,
+  NowPlaying,
   Source,
   SystemStats,
   WeatherSnapshot,
@@ -50,5 +51,20 @@ export const api = {
     signInOAuth: () => invoke<void>("openai_sign_in_oauth"),
     signOut: () => invoke<void>("openai_sign_out"),
     isSignedIn: () => invoke<boolean>("openai_is_signed_in"),
+  },
+
+  media: {
+    /** Reads via MPRIS on Linux — picks up Spotify, and any browser tab
+     *  playing audio through the Media Session API (Deezer, YouTube Music, ...).
+     *  `preferred` is an MPRIS identity substring (e.g. "Spotify", "Brave")
+     *  to control a specific app when several are active at once. */
+    nowPlaying: (preferred?: string) => invoke<NowPlaying | null>("get_now_playing", { preferred }),
+    playPause: (preferred?: string) => invoke<void>("media_play_pause", { preferred }),
+    next: (preferred?: string) => invoke<void>("media_next", { preferred }),
+    previous: (preferred?: string) => invoke<void>("media_previous", { preferred }),
+    getVolume: (preferred?: string) => invoke<number | null>("media_get_volume", { preferred }),
+    setVolume: (level: number, preferred?: string) =>
+      invoke<void>("media_set_volume", { level, preferred }),
+    listPlayers: () => invoke<string[]>("media_list_players"),
   },
 };

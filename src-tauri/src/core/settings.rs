@@ -21,10 +21,10 @@ pub fn default_settings() -> AppSettings {
         .collect(),
         info_filter: "relevant".into(),
         layout: vec![
-            WidgetLayout { id: "clock-1".into(), kind: "clock".into(), x: 0, y: 0, w: 2, h: 1, source_id: None, hidden_processes: None },
-            WidgetLayout { id: "weather-1".into(), kind: "weather".into(), x: 2, y: 0, w: 2, h: 1, source_id: None, hidden_processes: None },
-            WidgetLayout { id: "news-1".into(), kind: "news".into(), x: 0, y: 1, w: 4, h: 2, source_id: None, hidden_processes: None },
-            WidgetLayout { id: "system-1".into(), kind: "system".into(), x: 0, y: 3, w: 4, h: 1, source_id: None, hidden_processes: None },
+            WidgetLayout { id: "clock-1".into(), kind: "clock".into(), x: 0, y: 0, w: 2, h: 1, source_id: None, hidden_processes: None, preferred_media_player: None },
+            WidgetLayout { id: "weather-1".into(), kind: "weather".into(), x: 2, y: 0, w: 2, h: 1, source_id: None, hidden_processes: None, preferred_media_player: None },
+            WidgetLayout { id: "news-1".into(), kind: "news".into(), x: 0, y: 1, w: 4, h: 2, source_id: None, hidden_processes: None, preferred_media_player: None },
+            WidgetLayout { id: "system-1".into(), kind: "system".into(), x: 0, y: 3, w: 4, h: 1, source_id: None, hidden_processes: None, preferred_media_player: None },
         ],
         launch_on_startup: true,
     }

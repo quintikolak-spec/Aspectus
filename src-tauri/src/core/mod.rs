@@ -1,6 +1,7 @@
 pub mod ai_engine;
 pub mod auth;
 pub mod cache;
+pub mod media;
 pub mod news_engine;
 pub mod notifications;
 pub mod settings;

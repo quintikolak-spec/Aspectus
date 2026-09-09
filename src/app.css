@@ -114,6 +114,11 @@ a {
   background: var(--color-accent-dim);
 }
 
+::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
+}
+
 /* visible keyboard focus, not suppressed */
 :focus-visible {
   outline: 2px solid var(--color-accent);

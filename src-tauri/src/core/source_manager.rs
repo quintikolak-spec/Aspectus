@@ -24,11 +24,11 @@ pub async fn add_source(db: &State<'_, Db>, url: &str, category: &str) -> Result
         return Err(anyhow!("unsupported_scheme")); // guards against SSRF via file://, etc.
     }
 
-    let (kind, title) = probe_source(url).await?;
+    let (kind, title, resolved_url) = probe_source(url).await?;
 
     let source = Source {
         id: Uuid::new_v4().to_string(),
-        url: url.to_string(),
+        url: resolved_url,
         title,
         category: category.to_string(),
         kind,
@@ -77,29 +77,74 @@ pub fn remove_source(db: &State<Db>, id: &str) -> Result<()> {
 
 /// Tries to find an RSS/Atom feed first (cheaper + more reliable per section
 /// 6), falling back to HTML scraping. Returns (kind, human title).
-async fn probe_source(url: &str) -> Result<(String, String)> {
+/// Tries three things in order, matching section 6's RSS-preferred
+/// strategy: (1) is the given URL itself a feed, (2) does the page embed a
+/// `<link rel="alternate" type="application/rss+xml">` autodiscovery tag
+/// (what almost every real news site does — readers just don't usually
+/// type the feed URL directly, they give the homepage), (3) fall back to
+/// HTML scraping of the given URL as-is. Returns (kind, title, the URL we
+/// should actually store and poll going forward — which may differ from
+/// the URL the user typed, if autodiscovery found a feed).
+async fn probe_source(url: &str) -> Result<(String, String, String)> {
     let client = http_client()?;
 
     if let Ok(resp) = client.get(url).send().await {
         if let Ok(bytes) = resp.bytes().await {
             if let Ok(feed) = feed_rs::parser::parse(&bytes[..]) {
                 let title = feed.title.map(|t| t.content).unwrap_or_else(|| url.to_string());
-                return Ok(("rss".to_string(), title));
+                return Ok(("rss".to_string(), title, url.to_string()));
             }
         }
     }
 
-    // Not a feed — try common autodiscovery / fall back to HTML title.
     let html = client.get(url).send().await?.text().await?;
-    let document = scraper::Html::parse_document(&html);
-    let title_selector = scraper::Selector::parse("title").unwrap();
-    let title = document
-        .select(&title_selector)
-        .next()
-        .map(|n| n.text().collect::<String>())
-        .unwrap_or_else(|| url.to_string());
 
-    Ok(("html".to_string(), title.trim().to_string()))
+    // `scraper::Html` isn't `Send`, so it can't be held alive across an
+    // `.await` (Tauri commands require the whole future to be `Send`).
+    // Extract everything needed from it inside this synchronous block —
+    // both the discovered feed link *and* the HTML-title fallback — so
+    // the parsed document is fully dropped before any further await.
+    let (discovered_feed_url, fallback_title) = {
+        let document = scraper::Html::parse_document(&html);
+        let feed_url = discover_feed_link(&document, url);
+        let title_selector = scraper::Selector::parse("title").unwrap();
+        let title = document
+            .select(&title_selector)
+            .next()
+            .map(|n| n.text().collect::<String>())
+            .unwrap_or_else(|| url.to_string());
+        (feed_url, title)
+    };
+
+    if let Some(feed_url) = discovered_feed_url {
+        if let Ok(resp) = client.get(&feed_url).send().await {
+            if let Ok(bytes) = resp.bytes().await {
+                if let Ok(feed) = feed_rs::parser::parse(&bytes[..]) {
+                    let title = feed
+                        .title
+                        .map(|t| t.content)
+                        .unwrap_or_else(|| feed_url.clone());
+                    return Ok(("rss".to_string(), title, feed_url));
+                }
+            }
+        }
+    }
+
+    Ok(("html".to_string(), fallback_title.trim().to_string(), url.to_string()))
+}
+
+fn discover_feed_link(document: &scraper::Html, base_url: &str) -> Option<String> {
+    let link_selector = scraper::Selector::parse(
+        "link[rel=alternate][type='application/rss+xml'], \
+         link[rel=alternate][type='application/atom+xml']",
+    )
+    .unwrap();
+
+    document
+        .select(&link_selector)
+        .next()
+        .and_then(|el| el.value().attr("href"))
+        .map(|href| resolve_url(base_url, href))
 }
 
 pub async fn fetch_new_items(

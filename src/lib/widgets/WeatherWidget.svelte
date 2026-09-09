@@ -25,6 +25,27 @@
       <span class="condition">{snapshot.condition}</span>
     </div>
     <span class="location">{snapshot.locationName}</span>
+
+    <div class="details">
+      {#if snapshot.feelsLikeC !== null}
+        <span class="detail">
+          <span class="detail-label">Gefühlt</span>
+          <span class="data-readout">{Math.round(snapshot.feelsLikeC)}°</span>
+        </span>
+      {/if}
+      {#if snapshot.humidityPercent !== null}
+        <span class="detail">
+          <span class="detail-label">Luftfeuchte</span>
+          <span class="data-readout">{Math.round(snapshot.humidityPercent)}%</span>
+        </span>
+      {/if}
+      {#if snapshot.windSpeedKmh !== null}
+        <span class="detail">
+          <span class="detail-label">Wind</span>
+          <span class="data-readout">{Math.round(snapshot.windSpeedKmh)} km/h</span>
+        </span>
+      {/if}
+    </div>
   </div>
 {:else}
   <p class="hint">Lade Wetter…</p>
@@ -56,6 +77,23 @@
 
   .location {
     margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .details {
+    display: flex;
+    gap: 14px;
+    margin-top: 8px;
+  }
+
+  .detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .detail-label {
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
   }

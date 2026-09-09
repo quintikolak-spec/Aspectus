@@ -69,6 +69,13 @@ fn main() {
             commands::openai_sign_in_oauth,
             commands::openai_sign_out,
             commands::openai_is_signed_in,
+            commands::get_now_playing,
+            commands::media_play_pause,
+            commands::media_next,
+            commands::media_previous,
+            commands::media_get_volume,
+            commands::media_set_volume,
+            commands::media_list_players,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the application");

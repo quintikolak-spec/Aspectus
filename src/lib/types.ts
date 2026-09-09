@@ -16,6 +16,7 @@ export interface WidgetLayout {
   h: number;
   sourceId?: string; // set when kind === "source"
   hiddenProcesses?: string[]; // used by the system widget's process list
+  preferredMediaPlayer?: string; // used by the media widget
 }
 
 export interface Interest {
@@ -70,10 +71,20 @@ export interface SystemStats {
   topProcesses: ProcessInfo[];
 }
 
+export interface NowPlaying {
+  title: string;
+  artist: string | null;
+  source: string;
+  isPlaying: boolean;
+}
+
 export interface WeatherSnapshot {
   locationName: string;
   tempC: number;
   condition: string;
+  humidityPercent: number | null;
+  windSpeedKmh: number | null;
+  feelsLikeC: number | null;
   forecast: { day: string; high: number; low: number; condition: string }[];
 }
 

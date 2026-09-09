@@ -115,6 +115,95 @@ und eine Top-Prozesse-Liste im System-Widget, bei der sich einzelne
 Prozesse ausblenden und wieder einblenden lassen (persistiert in der
 jeweiligen Widget-Layout-Konfiguration).
 
+## Fünfte Runde: verschwindende News, Lautstärke-Stottern, Wetter-Details, Player-Auswahl
+
+- **News-Karten verschwanden nach dem zweiten „Jetzt aktualisieren"**:
+  Der Fallback-Pfad (KI gerade nicht signiert/verfügbar) zeigte eine Karte
+  an, speicherte sie aber nie in der DB — während der zugrunde liegende
+  Artikel trotzdem als „bereits gesehen" markiert wurde. Ergebnis: die
+  Karte war für immer weg, sobald man nochmal aktualisierte. Jetzt wird
+  auch dieser Fallback-Pfad persistiert.
+- **Lautstärkeregler stotterte**: löste bei jedem Drag-Tick einen
+  MPRIS-Aufruf aus, während der 2-Sekunden-Poll den Regler mitten im
+  Ziehen zurücksetzte. Reagiert jetzt nur noch auf Loslassen/Klick
+  (`on:change` statt `on:input`), und der Poll pausiert, solange aktiv
+  gezogen wird.
+- **Dropdown-Pfeile verkleinert** (waren unnötig groß).
+- **Wetter erweitert**: gefühlte Temperatur, Luftfeuchtigkeit,
+  Windgeschwindigkeit über Open-Meteos `current`-Parameter.
+- **Medien-Player-Auswahl**: `core/media.rs` akzeptiert jetzt überall einen
+  bevorzugten Player-Namen (z. B. "Spotify", "Brave") statt blind zu
+  raten; eine neue `media_list_players`-Abfrage listet alle aktiven
+  MPRIS-Player, das Widget zeigt bei mehreren Playern ein Auswahl-Dropdown
+  (nur sichtbar, wenn tatsächlich >1 Player aktiv ist), Auswahl wird pro
+  Widget gespeichert.
+
+## Compile-Fix: `scraper::Html` ist nicht `Send`
+
+`probe_source` hielt das geparste HTML-Dokument (`scraper::Html`) sowohl
+vor als auch nach dem RSS-Discovery-Fetch am Leben — da `scraper::Html`
+nicht `Send` ist, macht das die gesamte Async-Funktion nicht `Send`, was
+Tauri-Commands zwingend voraussetzen. Behoben, indem alles, was aus dem
+Dokument gebraucht wird (Feed-Link *und* HTML-Titel-Fallback), in einem
+synchronen Block extrahiert wird, der vor dem nächsten `.await` endet —
+das Dokument selbst existiert danach nicht mehr.
+
+## Vierte Runde: Lautstärke, API-Key-Speicherung, Windows-Terminal, RSS-Erkennung
+
+- **Lautstärkeregler** im Medien-Widget ergänzt (MPRIS `Volume`-Property,
+  get/set über `media_get_volume`/`media_set_volume`).
+- **API-Key-Speicherung**: `sign_in_with_api_key` verifiziert jetzt nach
+  dem Schreiben, dass der Wert auch wirklich zurückgelesen werden kann,
+  und gibt bei Fehlschlag eine klare Ursache zurück (fehlender/gesperrter
+  Schlüsselbund-Dienst wie KWallet/gnome-keyring) statt der bisherigen
+  irreführenden Pauschalmeldung. Das Frontend zeigt jetzt den echten
+  Fehlertext an. **Wenn der Fehler weiterhin auftritt**: das ist meist ein
+  Systemproblem, kein App-Bug — prüfen, ob unter CachyOS ein
+  Secret-Service-Provider läuft (z. B. `kwalletd6` bei KDE, oder
+  `gnome-keyring-daemon`) und beim Login automatisch entsperrt wird.
+- **Windows: Terminal blitzt bei jedem Update auf** — verursacht durch den
+  `nvidia-smi`-Unterprozessaufruf für die GPU-Anzeige, den Windows ohne
+  explizite Unterdrückung als kurz aufblitzendes Konsolenfenster anzeigt,
+  bei jedem Polling-Intervall. Fix in `system_monitor.rs` via
+  `CREATE_NO_WINDOW`-Flag auf Windows.
+- **Quelle `bild.de` funktionierte nicht**: der Homepage-Link selbst ist
+  kein RSS-Feed. `source_manager.rs` sucht jetzt automatisch nach dem
+  `<link rel="alternate" type="application/rss+xml">`-Autodiscovery-Tag,
+  das praktisch jede Nachrichtenseite einbettet, und speichert die dabei
+  gefundene tatsächliche Feed-URL statt der eingegebenen Homepage-URL.
+
+## UI-Lesbarkeit & echte Medienintegration (dritte Runde)
+
+- **Dropdowns kaum lesbar behoben**: WebKit/GTK rendert `<select>` ohne
+  `appearance: none` mit systemeigenem (hellem) Chrome, das unser
+  Dark-Theme nur teilweise überschreiben konnte. Jetzt mit `appearance:
+  none` + eigenem SVG-Pfeil in `SettingsPanel.svelte` und
+  `AddWidgetMenu.svelte` behoben. Platzhaltertext ist jetzt global über
+  `::placeholder` in `app.css` eingefärbt statt dem (auf Dark-Hintergrund
+  oft zu blassen) Browser-Standard.
+- **Quelle-hinzufügen-Feld deutlicher**: klareres Label
+  ("Link zur Webseite oder zum RSS-Feed"), konkreterer Platzhalter,
+  Auto-Fokus beim Öffnen.
+- **Medienwiedergabe ist jetzt echt**, nicht mehr die Attrappe aus dem
+  ersten Entwurf: `core/media.rs` liest über **MPRIS** (D-Bus) aus, was
+  gerade läuft — das erfasst automatisch auch Chromium-Tabs (Brave, Chrome)
+  mit aktiver Media-Session-API, also z. B. Deezer im Browser, ohne
+  seitenspezifischen Code. Play/Pause/Weiter/Zurück steuern den jeweils
+  aktiven Player. Nur Linux implementiert (passend zu CachyOS); Windows
+  bräuchte separat die SMTC-API, ist als TODO vermerkt.
+
+## Bekannte Grenze: Systemübersicht vs. natives Linux-Tool
+
+Die CPU-/Systemlast-Werte werden nie exakt mit KDE System Monitor
+übereinstimmen — beide berechnen aus denselben Kernel-Werten, aber mit
+unterschiedlichen Sampling-Fenstern und Glättung. Die letzten Fixes
+(persistente Messung, sauberer Startwert) haben die größten Ausreißer
+behoben; für Werte, die bis auf die Nachkommastelle übereinstimmen, müsste
+man exakt Plasmas Berechnungsmethode nachbauen, was den Aufwand kaum wert
+ist. Falls die Abweichung nach dem nächsten Test noch groß ist (nicht nur
+1-2 Prozentpunkte), sag Bescheid mit einem Vergleich beider Werte
+gleichzeitig — dann schauen wir gezielt weiter.
+
 ## Kritischer Fix: App-weiter Absturz durch doppelte Prozessnamen
 
 Die gemeldeten „toten“ Buttons hatten eine einzige Ursache: die

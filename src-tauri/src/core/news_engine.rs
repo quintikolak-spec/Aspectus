@@ -39,9 +39,13 @@ pub async fn refresh_all(db: &State<'_, Db>) -> Result<Vec<NewsCard>> {
         let Ok(token) = auth::get_token().await else {
             // Not signed in to an AI backend yet — surface raw items
             // untouched rather than silently dropping them, so the MVP is
-            // still usable before auth (section 18) is wired up.
+            // still usable before auth (section 18) is wired up. These
+            // MUST be persisted like any other card: the underlying items
+            // are already marked "seen" by fetch_new_items above, so an
+            // unpersisted card here would vanish forever on the next
+            // refresh with no way to recover it once the user signs in.
             for item in &candidates {
-                all_cards.push(NewsCard {
+                let card = NewsCard {
                     id: Uuid::new_v4().to_string(),
                     source_id: source.id.clone(),
                     source_title: source.title.clone(),
@@ -52,7 +56,9 @@ pub async fn refresh_all(db: &State<'_, Db>) -> Result<Vec<NewsCard>> {
                     importance: 0.5,
                     published_at: item.published_at.clone(),
                     fetched_at: Utc::now().to_rfc3339(),
-                });
+                };
+                persist_card(db, &card)?;
+                all_cards.push(card);
             }
             continue;
         };

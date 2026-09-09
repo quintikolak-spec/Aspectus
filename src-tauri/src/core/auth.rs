@@ -74,14 +74,34 @@ pub fn is_signed_in() -> bool {
 /// re: the OAuth flow.
 pub fn sign_in_with_api_key(key: &str) -> Result<()> {
     if !key.trim().starts_with("sk-") {
-        return Err(anyhow!("does not look like an OpenAI API key"));
+        return Err(anyhow!("Das sieht nicht nach einem gültigen OpenAI-API-Key aus (sollte mit \"sk-\" beginnen)."));
     }
-    store_credentials(&StoredCredentials {
+    let creds = StoredCredentials {
         kind: CredentialKind::ApiKey,
         access_token: key.trim().to_string(),
         refresh_token: None,
         expires_at: None,
-    })
+    };
+    store_credentials(&creds).map_err(|e| {
+        anyhow!(
+            "Konnte den Key nicht sicher speichern: {e}. Läuft ein Schlüsselbund-Dienst \
+             (z. B. KWallet oder gnome-keyring)? Ohne einen kann dieses Betriebssystem \
+             keine Zugangsdaten dauerhaft sichern."
+        )
+    })?;
+
+    // Verify the write actually landed and will survive a restart — some
+    // Linux setups without a properly unlocked default keyring collection
+    // accept the write but only into a session-scoped store that vanishes
+    // on the next login, which otherwise fails completely silently.
+    match load_credentials() {
+        Ok(reloaded) if reloaded.access_token == creds.access_token => Ok(()),
+        _ => Err(anyhow!(
+            "Der Key wurde scheinbar gespeichert, ließ sich aber nicht wieder auslesen. \
+             Das deutet auf ein Problem mit dem System-Schlüsselbund hin (z. B. KWallet \
+             nicht entsperrt) — der Key würde einen App-Neustart vermutlich nicht überleben."
+        )),
+    }
 }
 
 /// Returns a currently-valid access token, transparently refreshing an

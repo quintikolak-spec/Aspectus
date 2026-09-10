@@ -1,24 +1,64 @@
+cd ~/Aspectus
+
+cat > src-tauri/Cargo.toml << 'CARGOEOF'
+[package]
+name = "personal-dashboard"
+version = "0.1.0"
+edition = "2021"
+default-run = "personal-dashboard"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+feed-rs = "2"
+scraper = "0.20"
+url = "2"
+
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+sysinfo = "0.32"
+keyring = "3"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
+thiserror = "2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+mpris = "2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = ["Media_Control", "Foundation"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+CARGOEOF
+
+cat > src-tauri/src/core/media.rs << 'MEDIAEOF'
 use crate::models::NowPlaying;
 
-/// MPRIS (Media Player Remote Interfacing Specification) is the standard
-/// Linux desktops use for "now playing" info and media-key control over
-/// D-Bus. Chromium-based browsers (Brave, Chrome) register an MPRIS
-/// interface automatically whenever a page uses the Media Session API and
-/// something is playing -- which is exactly how sites like Deezer or
-/// YouTube Music show up here, no site-specific integration needed.
-///
-/// Every function here takes an optional `preferred` player identity
-/// (e.g. "Spotify", "Brave") so the user can pick which app to control
-/// when more than one is active at once, instead of the app guessing.
 #[cfg(target_os = "linux")]
 mod linux_impl {
     use super::NowPlaying;
     use mpris::{Player, PlayerFinder};
 
-    /// Picks the player matching `preferred` (case-insensitive substring
-    /// match against its MPRIS identity) if given and found; otherwise
-    /// falls back to whichever player is actively playing, or just the
-    /// first one available.
     fn select_player(finder: &PlayerFinder, preferred: Option<&str>) -> Option<Player> {
         let players = finder.find_all().ok()?;
         if players.is_empty() {
@@ -33,8 +73,6 @@ mod linux_impl {
             {
                 return Some(p);
             }
-            // Preferred player isn't currently active (e.g. Spotify closed) —
-            // fall through to the default heuristic rather than showing nothing.
             let players = finder.find_all().ok()?;
             return players
                 .into_iter()
@@ -57,8 +95,6 @@ mod linux_impl {
             .or_else(|| players.into_iter().next())
     }
 
-    /// Identities of every currently active MPRIS player, for a "which app
-    /// should I control" picker in the UI.
     pub fn list_players() -> Vec<String> {
         let Ok(finder) = PlayerFinder::new() else {
             return vec![];
@@ -131,15 +167,139 @@ mod linux_impl {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+mod windows_impl {
+    use super::NowPlaying;
+    use windows::Media::Control::{
+        GlobalSystemMediaTransportControlsSession as Session,
+        GlobalSystemMediaTransportControlsSessionManager as SessionManager,
+        GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
+    };
+
+    fn get_manager() -> Option<SessionManager> {
+        SessionManager::RequestAsync().ok()?.get().ok()
+    }
+
+    fn all_sessions(manager: &SessionManager) -> Vec<Session> {
+        let Ok(sessions) = manager.GetSessions() else {
+            return vec![];
+        };
+        let Ok(size) = sessions.Size() else {
+            return vec![];
+        };
+        (0..size).filter_map(|i| sessions.GetAt(i).ok()).collect()
+    }
+
+    fn is_playing(session: &Session) -> bool {
+        session
+            .GetPlaybackInfo()
+            .and_then(|info| info.PlaybackStatus())
+            .map(|status| status == PlaybackStatus::Playing)
+            .unwrap_or(false)
+    }
+
+    fn select_session(manager: &SessionManager, preferred: Option<&str>) -> Option<Session> {
+        let sessions = all_sessions(manager);
+        if sessions.is_empty() {
+            return None;
+        }
+
+        if let Some(name) = preferred {
+            let name_lower = name.to_lowercase();
+            if let Some(s) = sessions.iter().find(|s| {
+                s.SourceAppUserModelId()
+                    .map(|id| id.to_string_lossy().to_lowercase().contains(&name_lower))
+                    .unwrap_or(false)
+            }) {
+                return Some(s.clone());
+            }
+        }
+
+        sessions
+            .iter()
+            .find(|s| is_playing(s))
+            .or_else(|| sessions.first())
+            .cloned()
+    }
+
+    fn friendly_app_name(aumid: &str) -> String {
+        aumid
+            .split('!')
+            .next()
+            .unwrap_or(aumid)
+            .trim_end_matches(".exe")
+            .to_string()
+    }
+
+    pub fn list_players() -> Vec<String> {
+        let Some(manager) = get_manager() else {
+            return vec![];
+        };
+        all_sessions(&manager)
+            .iter()
+            .filter_map(|s| s.SourceAppUserModelId().ok())
+            .map(|id| friendly_app_name(&id.to_string_lossy()))
+            .collect()
+    }
+
+    pub fn now_playing(preferred: Option<&str>) -> Option<NowPlaying> {
+        let manager = get_manager()?;
+        let session = select_session(&manager, preferred)?;
+
+        let props = session.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
+        let title = props.Title().ok()?.to_string_lossy();
+        let artist = props
+            .Artist()
+            .ok()
+            .map(|a| a.to_string_lossy())
+            .filter(|s| !s.is_empty());
+        let source = session
+            .SourceAppUserModelId()
+            .map(|id| friendly_app_name(&id.to_string_lossy()))
+            .unwrap_or_else(|_| "Unbekannt".into());
+
+        Some(NowPlaying {
+            title,
+            artist,
+            source,
+            is_playing: is_playing(&session),
+        })
+    }
+
+    pub fn play_pause(preferred: Option<&str>) {
+        if let Some(manager) = get_manager() {
+            if let Some(session) = select_session(&manager, preferred) {
+                let _ = session.TryTogglePlayPauseAsync().and_then(|op| op.get());
+            }
+        }
+    }
+
+    pub fn next(preferred: Option<&str>) {
+        if let Some(manager) = get_manager() {
+            if let Some(session) = select_session(&manager, preferred) {
+                let _ = session.TrySkipNextAsync().and_then(|op| op.get());
+            }
+        }
+    }
+
+    pub fn previous(preferred: Option<&str>) {
+        if let Some(manager) = get_manager() {
+            if let Some(session) = select_session(&manager, preferred) {
+                let _ = session.TrySkipPreviousAsync().and_then(|op| op.get());
+            }
+        }
+    }
+
+    pub fn get_volume(_preferred: Option<&str>) -> Option<f64> {
+        None
+    }
+    pub fn set_volume(_preferred: Option<&str>, _level: f64) {}
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 mod fallback_impl {
     use super::NowPlaying;
 
-    // TODO: Windows equivalent is the System Media Transport Controls
-    // (SMTC) API, exposed via the `windows` crate's
-    // `Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager`.
-    // Not wired up yet since this project's active development target is
-    // Linux (CachyOS).
     pub fn list_players() -> Vec<String> {
         vec![]
     }
@@ -158,5 +318,11 @@ mod fallback_impl {
 #[cfg(target_os = "linux")]
 pub use linux_impl::*;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+pub use windows_impl::*;
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub use fallback_impl::*;
+MEDIAEOF
+
+echo "Fertig — beide Dateien geschrieben."

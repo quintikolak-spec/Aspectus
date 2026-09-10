@@ -17,6 +17,7 @@ export interface WidgetLayout {
   sourceId?: string; // set when kind === "source"
   hiddenProcesses?: string[]; // used by the system widget's process list
   preferredMediaPlayer?: string; // used by the media widget
+  newsSourceFilter?: string; // used by the news widget, a Source id or "" for all
 }
 
 export interface Interest {

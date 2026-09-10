@@ -69,12 +69,16 @@ impl SystemMonitor {
                 .or_insert(reading);
         }
 
-        // "Wie sehr ist das gesamte System ausgelastet" -- the 1-minute
-        // unix load average, expressed relative to core count so it reads
-        // as a familiar 0-100%+ figure instead of raw load-average units.
+        // "Wie sehr ist das gesamte System ausgelastet" -- on Linux/Unix
+        // this is the 1-minute load average, expressed relative to core
+        // count so it reads as a familiar 0-100%+ figure. Windows has no
+        // equivalent concept at all (sysinfo's load_average() just
+        // returns zero there, which made this gauge silently show
+        // nothing useful) -- so on Windows we fall back to a composite of
+        // CPU and RAM usage as a reasonable "how busy is the machine"
+        // proxy instead.
         let cpu_count = self.sys.cpus().len().max(1) as f64;
-        let load = System::load_average();
-        let system_load_percent = ((load.one / cpu_count) * 100.0) as f32;
+        let system_load_percent = system_load(cpu_percent, ram_percent, cpu_count);
 
         let gpu_percent = read_gpu_usage();
 
@@ -115,6 +119,21 @@ impl SystemMonitor {
             top_processes,
         }
     }
+}
+
+/// Platform-specific "how loaded is the whole machine" figure. Linux/Unix
+/// have a real, well-understood metric for this (load average, a queue-depth
+/// concept distinct from raw CPU%); Windows doesn't, so we approximate with
+/// a CPU/RAM composite there instead of showing a metric that's always zero.
+#[cfg(not(target_os = "windows"))]
+fn system_load(_cpu_percent: f32, _ram_percent: f32, cpu_count: f64) -> f32 {
+    let load = System::load_average();
+    ((load.one / cpu_count) * 100.0) as f32
+}
+
+#[cfg(target_os = "windows")]
+fn system_load(cpu_percent: f32, ram_percent: f32, _cpu_count: f64) -> f32 {
+    (cpu_percent + ram_percent) / 2.0
 }
 
 /// Maps a raw sysinfo/lm-sensors component label to a human category.

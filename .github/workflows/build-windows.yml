@@ -1,38 +1,61 @@
 name: Build Windows
 
+# Two ways to trigger this:
+# 1. Manually, from the "Actions" tab on GitHub -> "Build Windows" -> "Run workflow".
+#    Good for testing a build without publishing anything.
+# 2. Automatically on every push to `main`.
+#
+# Either way, the finished installers show up as a downloadable artifact
+# on the workflow run's summary page (bottom of the page, "Artifacts").
+# No release, no tag, no GitHub token setup required for this to work.
+
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build-windows:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: 20
 
-      - name: Setup Rust
+      - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
-        run: npm ci
+      # Caches ~/.cargo and src-tauri/target between runs -- without this,
+      # every run recompiles every Rust dependency from scratch (~10+ min).
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
-      - name: Build Tauri app
+      - name: Install frontend dependencies
+        run: npm install
+
+      # Windows GitHub runners already have the WebView2 runtime and the
+      # MSVC Build Tools Tauri needs -- no extra system setup required,
+      # unlike the Linux webkit2gtk dependencies this project needed
+      # locally on CachyOS.
+      - name: Build Tauri app (Windows)
         run: npm run tauri build
 
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
-          name: Aspectus-Windows
+          name: windows-installers
+          # Tauri produces both an .msi (Windows Installer) and an NSIS
+          # .exe (a more typical "setup.exe" double-click installer) --
+          # both are included so you can pick whichever your friend
+          # prefers.
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

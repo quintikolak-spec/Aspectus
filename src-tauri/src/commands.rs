@@ -42,19 +42,75 @@ pub async fn get_weather(db: State<'_, Db>, lat: f64, lon: f64) -> Result<Weathe
     let resp = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
 
+    let forecast = build_forecast(&json);
+    let location_name = reverse_geocode(lat, lon).await.unwrap_or_else(|| "Aktueller Standort".into());
+
     let snapshot = WeatherSnapshot {
-        location_name: "Aktueller Standort".into(),
+        location_name,
         temp_c: json["current"]["temperature_2m"].as_f64().unwrap_or(0.0) as f32,
         condition: weather_code_to_text(json["current"]["weather_code"].as_i64().unwrap_or(0)),
         humidity_percent: json["current"]["relative_humidity_2m"].as_f64().map(|v| v as f32),
         wind_speed_kmh: json["current"]["wind_speed_10m"].as_f64().map(|v| v as f32),
         feels_like_c: json["current"]["apparent_temperature"].as_f64().map(|v| v as f32),
-        forecast: vec![], // TODO: map `daily` arrays into ForecastDay entries
+        forecast,
     };
 
     let _ = cache::set(&db, &cache_key, &serde_json::to_string(&snapshot).unwrap(), Some(15 * 60));
 
     Ok(snapshot)
+}
+
+/// Maps Open-Meteo's `daily` arrays (parallel arrays indexed by day) into
+/// our `ForecastDay` list. Skips today (index 0) since the "current"
+/// block already covers it, matching section 4's "Tages-/Mehrtageseinsicht".
+fn build_forecast(json: &serde_json::Value) -> Vec<crate::models::ForecastDay> {
+    let times = json["daily"]["time"].as_array();
+    let highs = json["daily"]["temperature_2m_max"].as_array();
+    let lows = json["daily"]["temperature_2m_min"].as_array();
+    let codes = json["daily"]["weather_code"].as_array();
+
+    let (Some(times), Some(highs), Some(lows), Some(codes)) = (times, highs, lows, codes) else {
+        return vec![];
+    };
+
+    times
+        .iter()
+        .zip(highs.iter())
+        .zip(lows.iter())
+        .zip(codes.iter())
+        .skip(1) // today is already shown as "current"
+        .take(4)
+        .filter_map(|(((t, h), l), c)| {
+            Some(crate::models::ForecastDay {
+                day: t.as_str()?.to_string(),
+                high: h.as_f64()? as f32,
+                low: l.as_f64()? as f32,
+                condition: weather_code_to_text(c.as_i64().unwrap_or(0)),
+            })
+        })
+        .collect()
+}
+
+/// Reverse geocoding via Nominatim (OpenStreetMap) — free, no API key.
+/// Their usage policy requires a descriptive User-Agent and reasonable
+/// request volume; the 15-minute cache on the caller side already keeps
+/// this well within that.
+async fn reverse_geocode(lat: f64, lon: f64) -> Option<String> {
+    let url = format!(
+        "https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=10"
+    );
+    let client = reqwest::Client::builder()
+        .user_agent("PersonalDashboard/0.1 (local desktop widget)")
+        .build()
+        .ok()?;
+    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
+    let addr = &json["address"];
+    addr.get("city")
+        .or_else(|| addr.get("town"))
+        .or_else(|| addr.get("village"))
+        .or_else(|| addr.get("municipality"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn weather_code_to_text(code: i64) -> String {

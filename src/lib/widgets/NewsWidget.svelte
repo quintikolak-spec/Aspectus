@@ -1,11 +1,26 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { newsCards, refreshNewsNow } from "../stores/updateCycle";
+  import { settingsStore } from "../stores/settings";
+  import { api } from "../api";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import type { Source, WidgetLayout } from "../types";
+
+  export let widget: WidgetLayout;
 
   let refreshing = false;
   let refreshError = "";
+  let sources: Source[] = [];
 
-  $: cards = [...$newsCards].sort((a, b) => b.importance - a.importance).slice(0, 6);
+  onMount(async () => {
+    sources = await api.sources.list();
+  });
+
+  $: filterId = widget.newsSourceFilter;
+  $: cards = [...$newsCards]
+    .filter((c) => !filterId || c.sourceId === filterId)
+    .sort((a, b) => b.importance - a.importance)
+    .slice(0, 6);
 
   function openArticle(url: string) {
     // Always the original link — the app never replaces the source page.
@@ -23,12 +38,30 @@
       refreshing = false;
     }
   }
+
+  function onFilterChange(e: Event) {
+    const value = (e.currentTarget as HTMLSelectElement).value;
+    const layout = settingsStore.current().layout.map((w) =>
+      w.id === widget.id ? { ...w, newsSourceFilter: value || undefined } : w
+    );
+    settingsStore.updateLayout(layout);
+  }
 </script>
 
 <div class="news">
-  <button class="refresh-btn" on:click={manualRefresh} disabled={refreshing}>
-    {refreshing ? "Prüfe Quellen…" : "Jetzt aktualisieren"}
-  </button>
+  <div class="toolbar">
+    <button class="refresh-btn" on:click={manualRefresh} disabled={refreshing}>
+      {refreshing ? "Prüfe Quellen…" : "Jetzt aktualisieren"}
+    </button>
+    {#if sources.length > 1}
+      <select class="source-select" value={filterId ?? ""} on:change={onFilterChange}>
+        <option value="">Alle Quellen</option>
+        {#each sources as s}
+          <option value={s.id}>{s.title || s.url}</option>
+        {/each}
+      </select>
+    {/if}
+  </div>
   {#if refreshError}
     <p class="error">{refreshError}</p>
   {/if}
@@ -51,6 +84,24 @@
     flex-direction: column;
     gap: 10px;
     height: 100%;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .source-select {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 999px;
+    padding: 4px 10px;
+    appearance: none;
+    -webkit-appearance: none;
   }
 
   .card {
@@ -103,7 +154,6 @@
     border: 1px solid var(--color-border-strong);
     border-radius: 999px;
     padding: 4px 10px;
-    margin-bottom: 4px;
   }
 
   .refresh-btn:hover {

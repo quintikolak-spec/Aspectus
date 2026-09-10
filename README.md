@@ -115,6 +115,62 @@ und eine Top-Prozesse-Liste im System-Widget, bei der sich einzelne
 Prozesse ausblenden und wieder einblenden lassen (persistiert in der
 jeweiligen Widget-Layout-Konfiguration).
 
+## Windows-Build über GitHub Actions (ohne eigenen Windows-Rechner)
+
+`.github/workflows/build-windows.yml` baut die App auf einem von GitHub
+bereitgestellten Windows-Runner — WebView2 und die MSVC-Build-Tools sind
+dort bereits vorinstalliert, anders als die `webkit2gtk`-Abhängigkeiten,
+die lokal unter CachyOS nötig waren.
+
+**Einmalige Einrichtung:**
+1. Projekt in ein GitHub-Repository pushen (falls noch nicht vorhanden:
+   auf github.com ein neues, leeres Repo anlegen, dann lokal
+   `git init && git add -A && git commit -m "init" && git remote add origin <repo-url> && git push -u origin main`).
+2. Auf GitHub zum Tab **„Actions"** wechseln.
+
+**Zum Bauen:**
+- Läuft automatisch bei jedem Push auf `main`, **oder**
+- manuell: Actions-Tab → „Build Windows" → „Run workflow".
+
+**Ergebnis abholen:** Sobald der Lauf grün ist, unten auf der
+Zusammenfassungsseite unter „Artifacts" auf `windows-installers` klicken —
+enthält sowohl eine `.msi`- als auch eine `.exe`-Installationsdatei zum
+Download. Kein GitHub-Token, kein Release, kein Tag nötig.
+
+## Wetter-Widget war oben abgeschnitten
+
+`justify-content: center` im Wetter-Widget zentrierte den Inhalt vertikal
+— sobald durch die neuen Zusatzdaten (Details, Vorschau) mehr Inhalt da
+war als Platz in der Box, wurde die obere Hälfte davon nach oben aus dem
+sichtbaren Bereich gedrückt (der Scrollcontainer beginnt oben bei
+Position 0, nicht mittig). Behoben durch `justify-content: flex-start`.
+Zusätzlich hat das Wetter-Widget in den Standardeinstellungen jetzt mehr
+Höhe. **Bereits bestehende Installationen** übernehmen diesen neuen
+Standardwert nicht automatisch (er gilt nur für frische Installationen);
+dort einfach über den „+"-Button am Widget selbst einmal vergrößern.
+
+## Sechste Runde: Regler-Smoothness, Scrollbar-Überlappung, Wetter-Details, Quellen-Filter
+
+- **Lautstärkeregler jetzt smooth**: visuelle Position aktualisiert sich
+  sofort beim Ziehen (`on:input`), der eigentliche MPRIS-Aufruf ist per
+  80ms-Debounce entkoppelt statt bei jedem Pixel zu feuern — beim
+  Loslassen (`on:change`) wird der finale Wert sofort ohne Debounce-Delay
+  gesendet.
+- **Scrollbar überlappte Widget-Inhalte am rechten Rand — bei allen
+  Widgets**: `WidgetContainer.svelte`'s `.content`-Bereich hatte keinen
+  Platz für die Scrollbar reserviert, wodurch Regler/Buttons/Selects, die
+  bis an den Rand reichten, mit ihr kollidierten. Jetzt mit
+  Padding/Margin-Trick behoben, zusätzlich global schlankere
+  WebKit-Scrollbars (`::-webkit-scrollbar` in `app.css`).
+- **Wetter „zeigt keine genauen Sachen"**: zwei echte Lücken behoben —
+  die Mehrtagesvorschau war als leeres Array nie implementiert (jetzt aus
+  Open-Meteos `daily`-Feldern gemappt, 4 Tage), und der Ortsname war immer
+  nur „Aktueller Standort" (jetzt echte Reverse-Geocoding via Nominatim/
+  OpenStreetMap, kostenlos, kein API-Key).
+- **News-Quellen-Filter**: bei mehr als einer Quelle erscheint im
+  News-Widget ein Dropdown („Alle Quellen" oder eine bestimmte), analog
+  zur Player-Auswahl im Medien-Widget, pro Widget gespeichert.
+
 ## Fünfte Runde: verschwindende News, Lautstärke-Stottern, Wetter-Details, Player-Auswahl
 
 - **News-Karten verschwanden nach dem zweiten „Jetzt aktualisieren"**:

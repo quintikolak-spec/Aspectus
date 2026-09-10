@@ -46,6 +46,21 @@
         </span>
       {/if}
     </div>
+
+    {#if snapshot.forecast.length > 0}
+      <div class="forecast">
+        {#each snapshot.forecast as day}
+          <div class="forecast-day">
+            <span class="forecast-label">
+              {new Date(day.day).toLocaleDateString("de-DE", { weekday: "short" })}
+            </span>
+            <span class="forecast-temps data-readout">
+              {Math.round(day.high)}° / {Math.round(day.low)}°
+            </span>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 {:else}
   <p class="hint">Lade Wetter…</p>
@@ -55,7 +70,7 @@
   .weather {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     height: 100%;
   }
 
@@ -96,6 +111,29 @@
   .detail-label {
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
+  }
+
+  .forecast {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .forecast-day {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .forecast-label {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    text-transform: capitalize;
+  }
+
+  .forecast-temps {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
   }
 
   .hint {

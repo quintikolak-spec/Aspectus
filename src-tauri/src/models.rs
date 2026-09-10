@@ -35,6 +35,8 @@ pub struct WidgetLayout {
     pub hidden_processes: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferred_media_player: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub news_source_filter: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

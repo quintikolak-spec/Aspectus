@@ -1,64 +1,24 @@
-cd ~/Aspectus
-
-cat > src-tauri/Cargo.toml << 'CARGOEOF'
-[package]
-name = "personal-dashboard"
-version = "0.1.0"
-edition = "2021"
-default-run = "personal-dashboard"
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
-[dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-autostart = "2"
-tauri-plugin-notification = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-opener = "2"
-
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
-
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-feed-rs = "2"
-scraper = "0.20"
-url = "2"
-
-rusqlite = { version = "0.32", features = ["bundled"] }
-sha2 = "0.10"
-base64 = "0.22"
-rand = "0.8"
-sysinfo = "0.32"
-keyring = "3"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4"] }
-anyhow = "1"
-thiserror = "2"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-mpris = "2"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = ["Media_Control", "Foundation"] }
-
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-CARGOEOF
-
-cat > src-tauri/src/core/media.rs << 'MEDIAEOF'
 use crate::models::NowPlaying;
 
+/// MPRIS (Media Player Remote Interfacing Specification) is the standard
+/// Linux desktops use for "now playing" info and media-key control over
+/// D-Bus. Chromium-based browsers (Brave, Chrome) register an MPRIS
+/// interface automatically whenever a page uses the Media Session API and
+/// something is playing -- which is exactly how sites like Deezer or
+/// YouTube Music show up here, no site-specific integration needed.
+///
+/// Every function here takes an optional `preferred` player identity
+/// (e.g. "Spotify", "Brave") so the user can pick which app to control
+/// when more than one is active at once, instead of the app guessing.
 #[cfg(target_os = "linux")]
 mod linux_impl {
     use super::NowPlaying;
     use mpris::{Player, PlayerFinder};
 
+    /// Picks the player matching `preferred` (case-insensitive substring
+    /// match against its MPRIS identity) if given and found; otherwise
+    /// falls back to whichever player is actively playing, or just the
+    /// first one available.
     fn select_player(finder: &PlayerFinder, preferred: Option<&str>) -> Option<Player> {
         let players = finder.find_all().ok()?;
         if players.is_empty() {
@@ -73,6 +33,8 @@ mod linux_impl {
             {
                 return Some(p);
             }
+            // Preferred player isn't currently active (e.g. Spotify closed) —
+            // fall through to the default heuristic rather than showing nothing.
             let players = finder.find_all().ok()?;
             return players
                 .into_iter()
@@ -95,6 +57,8 @@ mod linux_impl {
             .or_else(|| players.into_iter().next())
     }
 
+    /// Identities of every currently active MPRIS player, for a "which app
+    /// should I control" picker in the UI.
     pub fn list_players() -> Vec<String> {
         let Ok(finder) = PlayerFinder::new() else {
             return vec![];
@@ -198,6 +162,9 @@ mod windows_impl {
             .unwrap_or(false)
     }
 
+    /// Same selection strategy as the Linux MPRIS implementation: prefer
+    /// an explicit match on the app identity, otherwise whichever session
+    /// is actually playing, otherwise just the first one.
     fn select_session(manager: &SessionManager, preferred: Option<&str>) -> Option<Session> {
         let sessions = all_sessions(manager);
         if sessions.is_empty() {
@@ -208,7 +175,7 @@ mod windows_impl {
             let name_lower = name.to_lowercase();
             if let Some(s) = sessions.iter().find(|s| {
                 s.SourceAppUserModelId()
-                    .map(|id| id.to_string_lossy().to_lowercase().contains(&name_lower))
+                    .map(|id| id.to_string().to_lowercase().contains(&name_lower))
                     .unwrap_or(false)
             }) {
                 return Some(s.clone());
@@ -222,6 +189,9 @@ mod windows_impl {
             .cloned()
     }
 
+    /// `SourceAppUserModelId` is often a raw AUMID like
+    /// "Spotify.exe" or a package-family id for UWP/browser apps --
+    /// trim the noisy parts so the UI shows something readable.
     fn friendly_app_name(aumid: &str) -> String {
         aumid
             .split('!')
@@ -238,7 +208,7 @@ mod windows_impl {
         all_sessions(&manager)
             .iter()
             .filter_map(|s| s.SourceAppUserModelId().ok())
-            .map(|id| friendly_app_name(&id.to_string_lossy()))
+            .map(|id| friendly_app_name(&id.to_string()))
             .collect()
     }
 
@@ -247,15 +217,15 @@ mod windows_impl {
         let session = select_session(&manager, preferred)?;
 
         let props = session.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
-        let title = props.Title().ok()?.to_string_lossy();
+        let title = props.Title().ok()?.to_string();
         let artist = props
             .Artist()
             .ok()
-            .map(|a| a.to_string_lossy())
+            .map(|a| a.to_string())
             .filter(|s| !s.is_empty());
         let source = session
             .SourceAppUserModelId()
-            .map(|id| friendly_app_name(&id.to_string_lossy()))
+            .map(|id| friendly_app_name(&id.to_string()))
             .unwrap_or_else(|_| "Unbekannt".into());
 
         Some(NowPlaying {
@@ -290,6 +260,11 @@ mod windows_impl {
         }
     }
 
+    // Windows' Media Session API (SMTC) has no volume control -- per-app
+    // volume on Windows lives in a separate Core Audio API (the volume
+    // mixer, via IAudioSessionManager2/ISimpleAudioVolume), which isn't
+    // wired up here. The volume slider simply won't show on Windows,
+    // matching the "no data" behaviour the widget already has.
     pub fn get_volume(_preferred: Option<&str>) -> Option<f64> {
         None
     }
@@ -300,6 +275,7 @@ mod windows_impl {
 mod fallback_impl {
     use super::NowPlaying;
 
+    // No media integration implemented for this platform yet.
     pub fn list_players() -> Vec<String> {
         vec![]
     }
@@ -323,6 +299,3 @@ pub use windows_impl::*;
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub use fallback_impl::*;
-MEDIAEOF
-
-echo "Fertig — beide Dateien geschrieben."

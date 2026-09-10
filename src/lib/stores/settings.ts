@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   infoFilter: "relevant",
   layout: [
     { id: "clock-1", kind: "clock", x: 0, y: 0, w: 2, h: 1 },
-    { id: "weather-1", kind: "weather", x: 2, y: 0, w: 2, h: 1 },
+    { id: "weather-1", kind: "weather", x: 2, y: 0, w: 2, h: 2 },
     { id: "news-1", kind: "news", x: 0, y: 1, w: 4, h: 2 },
     { id: "system-1", kind: "system", x: 0, y: 3, w: 4, h: 1 },
   ],

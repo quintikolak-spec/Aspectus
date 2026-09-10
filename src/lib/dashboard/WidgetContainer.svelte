@@ -54,6 +54,10 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    /* Room for the scrollbar so it doesn't sit on top of interactive
+       content (sliders, buttons) flush against the right edge. */
+    padding-right: 8px;
+    margin-right: -8px;
   }
 
   .controls {

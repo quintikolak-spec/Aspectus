@@ -12,6 +12,7 @@
   let adjustingVolume = false;
   let players: string[] = [];
   let timer: ReturnType<typeof setInterval>;
+  let volumeDebounce: ReturnType<typeof setTimeout>;
 
   $: preferred = widget.preferredMediaPlayer;
 
@@ -33,7 +34,10 @@
     poll();
     timer = setInterval(poll, 2000);
   });
-  onDestroy(() => clearInterval(timer));
+  onDestroy(() => {
+    clearInterval(timer);
+    clearTimeout(volumeDebounce);
+  });
 
   async function playPause() {
     await api.media.playPause(preferred);
@@ -48,9 +52,22 @@
     poll();
   }
 
-  function onVolumeChange(e: Event) {
+  function onVolumeInput(e: Event) {
+    // Update the visual position immediately (smooth, native drag feel),
+    // but debounce the actual MPRIS call so dragging doesn't fire one IPC
+    // round-trip per pixel — that round-trip latency was the stutter.
     const level = Number((e.currentTarget as HTMLInputElement).value) / 100;
     volume = level;
+    clearTimeout(volumeDebounce);
+    volumeDebounce = setTimeout(() => api.media.setVolume(level, preferred), 80);
+  }
+
+  function onVolumeRelease(e: Event) {
+    // Ensure the final position is applied immediately on release,
+    // instead of possibly waiting out the debounce delay.
+    const level = Number((e.currentTarget as HTMLInputElement).value) / 100;
+    volume = level;
+    clearTimeout(volumeDebounce);
     api.media.setVolume(level, preferred);
     adjustingVolume = false;
   }
@@ -65,7 +82,7 @@
 </script>
 
 <div class="media">
-  {#if players.length > 1}
+  {#if players.length > 0}
     <select class="player-select" value={preferred ?? ""} on:change={onPlayerChange}>
       <option value="">Automatisch</option>
       {#each players as p}
@@ -109,7 +126,8 @@
         max="100"
         value={Math.round(volume * 100)}
         on:pointerdown={() => (adjustingVolume = true)}
-        on:change={onVolumeChange}
+        on:input={onVolumeInput}
+        on:change={onVolumeRelease}
         aria-label="Lautstärke"
       />
     </div>
@@ -131,9 +149,17 @@
     color: var(--color-text-secondary);
     border: 1px solid var(--color-border-strong);
     border-radius: 6px;
-    padding: 2px 6px;
+    padding: 2px 20px 2px 6px;
     appearance: none;
     -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93a1' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 9px 6px;
+  }
+
+  .player-select:hover {
+    border-color: var(--color-accent);
   }
   .info {
     display: flex;

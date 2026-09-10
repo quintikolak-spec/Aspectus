@@ -119,6 +119,27 @@ a {
   opacity: 1;
 }
 
+/* Slim, unobtrusive scrollbars — WebKitGTK's default is wide and
+   opaque, which is what was visually colliding with widget content
+   (sliders, buttons) that sits flush against the right edge. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
 /* visible keyboard focus, not suppressed */
 :focus-visible {
   outline: 2px solid var(--color-accent);

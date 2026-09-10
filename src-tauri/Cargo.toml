@@ -41,6 +41,7 @@ mpris = "2"
 windows = { version = "0.61", features = ["Media_Control", "Foundation"] }
 
 [profile.release]
+# Optimize for the "extrem ressourcenschonend" goal, not compile speed.
 opt-level = "z"
 lto = true
 codegen-units = 1

@@ -17,15 +17,23 @@ pub fn app_data_dir() -> Result<PathBuf> {
 // Deliberately not pulling in the `dirs` crate for one lookup — a couple of
 // std/env based fallbacks keep the dependency tree (and thus binary size
 // and RAM footprint) smaller, in line with the ressourcenschonend goal.
+// Checked in a platform-aware order rather than "first env var that
+// happens to be set" — some Windows terminals (Git Bash etc.) also set
+// HOME, which would otherwise resolve to a Unix-style path by accident.
+#[cfg(target_os = "windows")]
+fn dirs_next_data_dir() -> Option<PathBuf> {
+    std::env::var("APPDATA")
+        .ok()
+        .map(|appdata| PathBuf::from(appdata).join("PersonalDashboard"))
+}
+
+#[cfg(not(target_os = "windows"))]
 fn dirs_next_data_dir() -> Option<PathBuf> {
     if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
         return Some(PathBuf::from(xdg).join("personal-dashboard"));
     }
     if let Ok(home) = std::env::var("HOME") {
         return Some(PathBuf::from(home).join(".local/share/personal-dashboard"));
-    }
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        return Some(PathBuf::from(appdata).join("PersonalDashboard"));
     }
     None
 }
